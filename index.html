@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>물방울 - 함께 물 마시기</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif; background:#f0f4ff; display:flex; justify-content:center; min-height:100vh; }
+    .app { width:100%; max-width:420px; min-height:100vh; background:linear-gradient(180deg,#e8f0fe 0%,#f8f9ff 100%); position:relative; overflow:hidden; }
+    .screen { display:none; flex-direction:column; align-items:center; padding:20px; min-height:100vh; }
+    .screen.active { display:flex; }
+
+    .onboard-title { font-size:24px; font-weight:700; margin:60px 0 10px; color:#2d3436; }
+    .onboard-sub { font-size:14px; color:#888; margin-bottom:30px; text-align:center; }
+    .onboard-input { width:100%; max-width:300px; padding:14px 18px; border:2px solid #ddd; border-radius:14px; font-size:16px; text-align:center; outline:none; transition:border .2s; }
+    .onboard-input:focus { border-color:#74b9ff; }
+    .gender-btns { display:flex; gap:16px; margin:20px 0; }
+    .gender-btn { width:120px; height:120px; border-radius:20px; border:3px solid #ddd; background:#fff; font-size:40px; cursor:pointer; transition:all .2s; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+    .gender-btn span { font-size:14px; color:#555; }
+    .gender-btn.selected { border-color:#74b9ff; background:#ebf5ff; transform:scale(1.05); }
+    .slider-wrap { width:100%; max-width:300px; margin:20px 0; }
+    .slider-wrap input[type=range] { width:100%; }
+    .slider-val { text-align:center; font-size:28px; font-weight:700; color:#0984e3; margin:10px 0; }
+    .activity-btns { display:flex; flex-direction:column; gap:12px; width:100%; max-width:300px; }
+    .activity-btn { padding:16px; border-radius:14px; border:2px solid #ddd; background:#fff; font-size:15px; cursor:pointer; text-align:left; transition:all .2s; }
+    .activity-btn.selected { border-color:#74b9ff; background:#ebf5ff; }
+    .btn-next { width:100%; max-width:300px; padding:16px; border:none; border-radius:14px; background:linear-gradient(135deg,#74b9ff,#a29bfe); color:#fff; font-size:17px; font-weight:700; cursor:pointer; margin-top:20px; transition:transform .1s; }
+    .btn-next:active { transform:scale(0.97); }
+    .btn-next:disabled { opacity:0.4; cursor:default; }
+    .goal-display { font-size:48px; font-weight:800; color:#0984e3; margin:20px 0 5px; }
+    .goal-unit { font-size:16px; color:#888; }
+    .goal-adjust { display:flex; gap:12px; margin:15px 0; }
+    .goal-adjust button { width:44px; height:44px; border-radius:50%; border:2px solid #ddd; background:#fff; font-size:20px; cursor:pointer; }
+
+    .couple-title { font-size:20px; font-weight:700; margin:30px 0 10px; }
+    .couple-code-display { font-size:36px; font-weight:800; color:#0984e3; letter-spacing:6px; margin:15px 0; padding:12px 30px; background:#fff; border-radius:14px; border:2px dashed #74b9ff; }
+    .couple-input { width:200px; padding:14px; border:2px solid #ddd; border-radius:14px; font-size:24px; text-align:center; letter-spacing:6px; outline:none; }
+    .couple-input:focus { border-color:#74b9ff; }
+    .btn-skip { background:none; border:none; color:#999; font-size:14px; margin-top:15px; cursor:pointer; text-decoration:underline; }
+
+    .main-header { width:100%; display:flex; justify-content:space-between; align-items:center; padding:10px 0; }
+    .main-date { font-size:13px; color:#888; }
+    .main-code { font-size:12px; color:#aaa; background:#f0f0f0; padding:3px 10px; border-radius:20px; }
+
+    /* ===== 캐릭터 영역 (좌우 분리) ===== */
+    .character-area {
+      position:relative;
+      width:280px;
+      height:280px;
+      margin:10px auto;
+      cursor:pointer;
+    }
+    /* 회색 배경 (항상 보임) */
+    .char-gray {
+      position:absolute;
+      top:0; left:0;
+      width:100%; height:100%;
+      object-fit:contain;
+      filter:grayscale(100%) brightness(1.2) opacity(0.4);
+      z-index:1;
+    }
+    /* 왼쪽 반 (나) */
+    .char-left-wrap {
+      position:absolute;
+      top:0; left:0;
+      width:50%; height:100%;
+      overflow:hidden;
+      z-index:2;
+    }
+    .char-left-wrap img {
+      width:200%;
+      height:100%;
+      object-fit:contain;
+      object-position:left center;
+      clip-path:inset(100% 0 0 0);
+      transition:clip-path 1.5s ease;
+    }
+    /* 오른쪽 반 (상대) */
+    .char-right-wrap {
+      position:absolute;
+      top:0; right:0;
+      width:50%; height:100%;
+      overflow:hidden;
+      z-index:2;
+    }
+    .char-right-wrap img {
+      width:200%;
+      height:100%;
+      object-fit:contain;
+      object-position:right center;
+      margin-left:-100%;
+      clip-path:inset(100% 0 0 0);
+      transition:clip-path 1.5s ease;
+    }
+
+    /* 상태 행 */
+    .status-row {
+      display:flex;
+      justify-content:space-around;
+      width:100%;
+      max-width:320px;
+      margin:10px 0;
+      padding:14px;
+      background:#fff;
+      border-radius:16px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.05);
+    }
+    .status-item { text-align:center; flex:1; }
+    .status-name { font-size:12px; color:#888; margin-bottom:4px; }
+    .status-pct { font-size:28px; font-weight:800; }
+    .status-pct.blue { color:#74b9ff; }
+    .status-pct.pink { color:#f8a5c2; }
+    .status-ml { font-size:11px; color:#aaa; margin-top:2px; }
+    .status-divider { width:1px; background:#eee; margin:0 5px; }
+
+    .heart-msg {
+      font-size:14px; color:#e17055;
+      margin:8px 0; opacity:0;
+      transition:opacity .5s; text-align:center;
+    }
+    .heart-msg.show { opacity:1; }
+
+    .btn-drink {
+      width:90%; max-width:320px; padding:18px;
+      border:none; border-radius:16px;
+      background:linear-gradient(135deg,#74b9ff,#a29bfe);
+      color:#fff; font-size:18px; font-weight:700;
+      cursor:pointer; margin:10px 0 8px;
+      transition:transform .1s;
+    }
+    .btn-drink:active { transform:scale(0.96); }
+    .btn-drink:disabled { opacity:0.4; cursor:default; }
+    .btn-ghost {
+      background:none; border:1px solid #ddd;
+      padding:10px 20px; border-radius:12px;
+      font-size:13px; color:#888; cursor:pointer; margin:4px;
+    }
+    .btn-ghost:disabled { opacity:0.3; cursor:default; }
+    .bottom-bar { display:flex; gap:10px; margin-top:8px; }
+    .bottom-nav {
+      display:flex; width:100%; max-width:320px;
+      justify-content:space-around;
+      margin-top:auto; padding:12px 0;
+      border-top:1px solid #eee;
+    }
+    .bottom-nav button {
+      background:none; border:none;
+      font-size:13px; color:#888;
+      cursor:pointer; padding:8px 16px;
+    }
+
+    .settings-group { width:100%; max-width:320px; margin:10px 0; }
+    .settings-label { font-size:13px; color:#888; margin-bottom:6px; }
+    .settings-input { width:100%; padding:12px; border:2px solid #eee; border-radius:12px; font-size:15px; outline:none; }
+    .settings-input:focus { border-color:#74b9ff; }
+    .settings-code { font-size:20px; font-weight:700; color:#0984e3; letter-spacing:4px; text-align:center; margin:10px 0; }
+    .btn-save { width:100%; max-width:320px; padding:14px; border:none; border-radius:14px; background:#0984e3; color:#fff; font-size:16px; font-weight:700; cursor:pointer; margin:10px 0; }
+    .btn-danger { width:100%; max-width:320px; padding:14px; border:none; border-radius:14px; background:#d63031; color:#fff; font-size:16px; font-weight:700; cursor:pointer; margin:6px 0; }
+
+    .timeline-list { width:100%; max-width:340px; margin-top:15px; }
+    .timeline-item { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #f0f0f0; }
+    .timeline-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    .timeline-dot.blue { background:#74b9ff; }
+    .timeline-dot.pink { background:#f8a5c2; }
+    .timeline-time { font-size:13px; color:#888; min-width:50px; }
+    .timeline-text { font-size:14px; color:#444; }
+    .timeline-empty { text-align:center; color:#aaa; margin-top:40px; font-size:14px; }
+
+    .toast {
+      position:fixed; bottom:30px; left:50%;
+      transform:translateX(-50%) translateY(100px);
+      background:rgba(0,0,0,0.8); color:#fff;
+      padding:12px 28px; border-radius:30px;
+      font-size:14px; z-index:9999;
+      transition:transform .3s; pointer-events:none;
+    }
+    .toast.show { transform:translateX(-50%) translateY(0); }
+
+    .modal-overlay {
+      display:none; position:fixed;
+      top:0;left:0;right:0;bottom:0;
+      background:rgba(0,0,0,0.4); z-index:100;
+      justify-content:center; align-items:center;
+    }
+    .modal-overlay.show { display:flex; }
+    .modal-box {
+      background:#fff; border-radius:20px;
+      padding:30px; text-align:center;
+      max-width:300px; width:90%;
+    }
+    .modal-box h3 { font-size:18px; margin-bottom:10px; }
+    .modal-box p { font-size:14px; color:#888; margin-bottom:20px; }
+
+    .nudge-banner {
+      display:none; position:fixed;
+      top:0;left:0;right:0;
+      background:linear-gradient(135deg,#fd79a8,#e17055);
+      color:#fff; text-align:center;
+      padding:16px; font-size:15px; font-weight:700;
+      z-index:200; animation:slideDown .3s ease;
+    }
+    .nudge-banner.show { display:block; }
+    @keyframes slideDown { from{transform:translateY(-100%)} to{transform:translateY(0)} }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <div class="toast" id="toast"></div>
+  <div class="nudge-banner" id="nudge-banner"></div>
+
+  <div class="modal-overlay" id="nudge-modal">
+    <div class="modal-box">
+      <h3>💧 찔러보기</h3>
+      <p>상대방에게 물 마시라고 알릴까요?</p>
+      <button class="btn-next" style="max-width:200px;padding:12px;" onclick="sendNudge()">찔러보기!</button>
+      <br>
+      <button class="btn-ghost" onclick="closeNudgeModal()">취소</button>
+    </div>
+  </div>
+
+  <!-- 1. 이름 -->
+  <div id="screen-name" class="screen active">
+    <div class="onboard-title">반가워요! 👋</div>
+    <div class="onboard-sub">이름을 알려주세요</div>
+    <input class="onboard-input" id="input-name" placeholder="이름 또는 닉네임" maxlength="10">
+    <button class="btn-next" id="btn-name-next" onclick="goToGender()" disabled>다음</button>
+  </div>
+
+  <!-- 2. 성별 -->
+  <div id="screen-gender" class="screen">
+    <div class="onboard-title">성별을 선택하세요</div>
+    <div class="onboard-sub">물 섭취 권장량 계산에 사용돼요</div>
+    <div class="gender-btns">
+      <button class="gender-btn" onclick="selectGender('male',this)">🙋‍♂️<span>남성</span></button>
+      <button class="gender-btn" onclick="selectGender('female',this)">🙋‍♀️<span>여성</span></button>
+    </div>
+    <button class="btn-next" id="btn-gender-next" onclick="goToWeight()" disabled>다음</button>
+  </div>
+
+  <!-- 3. 체중 -->
+  <div id="screen-weight" class="screen">
+    <div class="onboard-title">체중을 알려주세요</div>
+    <div class="onboard-sub">정확한 목표량 계산을 위해 필요해요</div>
+    <div class="slider-val" id="weight-val">60 kg</div>
+    <div class="slider-wrap">
+      <input type="range" id="input-weight" min="30" max="150" value="60" oninput="updateWeightLabel()">
+    </div>
+    <button class="btn-next" onclick="goToActivity()">다음</button>
+  </div>
+
+  <!-- 4. 활동량 -->
+  <div id="screen-activity" class="screen">
+    <div class="onboard-title">활동량은 어때요?</div>
+    <div class="onboard-sub">일상적인 활동 수준을 선택하세요</div>
+    <div class="activity-btns">
+      <button class="activity-btn" onclick="selectActivity('low',this)">🛋️ 적음<br><small style="color:#aaa">주로 앉아서 생활</small></button>
+      <button class="activity-btn" onclick="selectActivity('normal',this)">🚶 보통<br><small style="color:#aaa">가벼운 활동, 산책</small></button>
+      <button class="activity-btn" onclick="selectActivity('high',this)">🏃 많음<br><small style="color:#aaa">운동, 육체 노동</small></button>
+    </div>
+    <button class="btn-next" id="btn-activity-next" onclick="goToGoal()" disabled>다음</button>
+  </div>
+
+  <!-- 5. 목표량 -->
+  <div id="screen-goal" class="screen">
+    <div class="onboard-title">추천 목표량</div>
+    <div class="onboard-sub">체중과 활동량을 기반으로 계산했어요</div>
+    <div class="goal-display" id="goal-display">1800</div>
+    <div class="goal-unit">ml / 하루</div>
+    <div class="goal-adjust">
+      <button onclick="adjustGoal(-100)">−</button>
+      <button onclick="adjustGoal(100)">+</button>
+    </div>
+    <div class="onboard-sub">100ml 단위로 조절할 수 있어요</div>
+    <button class="btn-next" onclick="goToCouple()">이 목표로 시작!</button>
+  </div>
+
+  <!-- 6. 커플 코드 -->
+  <div id="screen-couple" class="screen">
+    <div class="onboard-title">커플 연결 💑</div>
+    <div class="onboard-sub">함께 물 마실 상대와 연결하세요</div>
+    <button class="btn-next" onclick="createCouple()" id="btn-create" style="margin-bottom:20px;">커플 코드 만들기</button>
+    <div id="created-code-area" style="display:none;text-align:center;">
+      <div class="onboard-sub">이 코드를 상대방에게 알려주세요</div>
+      <div class="couple-code-display" id="my-couple-code"></div>
+      <button class="btn-next" onclick="goToMain()" style="margin-top:15px;">메인으로 가기</button>
+    </div>
+    <div style="margin:20px 0;color:#aaa;">── 또는 ──</div>
+    <div class="onboard-sub">상대방의 코드를 입력하세요</div>
+    <input class="couple-input" id="input-couple-code" placeholder="000000" maxlength="6">
+    <button class="btn-next" onclick="joinCouple()" id="btn-join" style="margin-top:10px;">참여하기</button>
+    <button class="btn-skip" onclick="skipCouple()">나중에 연결할게요</button>
+  </div>
+
+  <!-- 7. 메인 -->
+  <div id="screen-main" class="screen">
+    <div class="main-header">
+      <span class="main-date" id="main-date"></span>
+      <span class="main-code" id="main-code"></span>
+    </div>
+
+    <!-- 캐릭터: 회색 + 왼쪽(나) + 오른쪽(상대) -->
+    <div class="character-area" onclick="openNudgeModal()">
+      <img class="char-gray" src="couple.png" alt="">
+      <div class="char-left-wrap">
+        <img id="fill-left" src="couple.png" alt="">
+      </div>
+      <div class="char-right-wrap">
+        <img id="fill-right" src="couple.png" alt="">
+      </div>
+    </div>
+
+    <!-- 상태 카드 -->
+    <div class="status-row">
+      <div class="status-item">
+        <div class="status-name" id="my-name-display">나</div>
+        <div class="status-pct blue" id="my-pct">0%</div>
+        <div class="status-ml" id="my-ml">0 / 1800 ml</div>
+      </div>
+      <div class="status-divider"></div>
+      <div class="status-item">
+        <div class="status-name" id="partner-name-display">상대방</div>
+        <div class="status-pct pink" id="partner-pct">—</div>
+        <div class="status-ml" id="partner-ml">연결 대기중</div>
+      </div>
+    </div>
+
+    <div class="heart-msg" id="heart-msg">💕 둘 다 열심히 마시고 있어요!</div>
+
+    <button class="btn-drink" id="btn-drink" onclick="drinkWater()">💧 물 마셨어!</button>
+    <div class="bottom-bar">
+      <button class="btn-ghost" id="btn-undo" onclick="undoDrink()">↩️ 실수로 눌렀어</button>
+    </div>
+
+    <div class="bottom-nav">
+      <button onclick="showScreen('screen-couple')">🔗 커플</button>
+      <button onclick="openTimeline()">📋 기록</button>
+      <button onclick="showScreen('screen-settings')">⚙️ 설정</button>
+    </div>
+  </div>
+
+  <!-- 8. 타임라인 -->
+  <div id="screen-timeline" class="screen">
+    <div class="onboard-title">📋 오늘의 기록</div>
+    <div class="timeline-list" id="timeline-list"></div>
+    <button class="btn-next" onclick="showScreen('screen-main')" style="margin-top:20px;">돌아가기</button>
+  </div>
+
+  <!-- 9. 설정 -->
+  <div id="screen-settings" class="screen">
+    <div class="onboard-title">⚙️ 설정</div>
+    <div class="settings-group">
+      <div class="settings-label">이름</div>
+      <input class="settings-input" id="set-name">
+    </div>
+    <div class="settings-group">
+      <div class="settings-label">하루 목표 (ml)</div>
+      <input class="settings-input" id="set-goal" type="number">
+    </div>
+    <div class="settings-group">
+      <div class="settings-label">1회 음수량 (ml)</div>
+      <input class="settings-input" id="set-amount" type="number">
+    </div>
+    <div class="settings-group">
+      <div class="settings-label">물방울 감소 시간 (분)</div>
+      <input class="settings-input" id="set-drain" type="number">
+    </div>
+    <div class="settings-group">
+      <div class="settings-label">커플 코드</div>
+      <div class="settings-code" id="set-code">------</div>
+    </div>
+    <button class="btn-save" onclick="saveSettings()">저장</button>
+    <button class="btn-next" onclick="showScreen('screen-main')" style="background:#aaa;">돌아가기</button>
+    <button class="btn-danger" onclick="resetAll()" style="margin-top:20px;">데이터 초기화</button>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyC8xAS_nIWyN_iPxBlt3drLF88sxk3YO-4",
+  authDomain:"woo-doo-6960f.firebaseapp.com",
+  databaseURL:"https://woo-doo-6960f-default-rtdb.firebaseio.com",
+  projectId:"woo-doo-6960f",
+  storageBucket:"woo-doo-6960f.firebasestorage.app",
+  messagingSenderId:"167231201131",
+  appId:"1:167231201131:web:022c9bb88a6eec9101f62e",
+  measurementId:"G-6GENGYWSNB"
+});
+const db=firebase.database();
+
+let state={
+  userId:'',name:'',gender:'',weight:60,activity:'normal',
+  dailyGoal:1800,drinkAmount:250,drainMinutes:120,
+  coupleCode:'',todayTotal:0,lastDrinkTime:null,
+  logs:{},partnerKey:'',lastNudgeSent:0
+};
+let partnerData=null;
+
+function init(){
+  const saved=localStorage.getItem('waterDropState');
+  if(saved){
+    Object.assign(state,JSON.parse(saved));
+    checkDayReset();
+    if(state.coupleCode){listenToFirebase();showScreen('screen-main');updateMainScreen();startDrainTimer();}
+    else if(state.name)showScreen('screen-couple');
+  }
+  if(!state.userId){
+    state.userId='user_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+    saveState();
+  }
+  document.getElementById('input-name').addEventListener('input',function(){
+    document.getElementById('btn-name-next').disabled=!this.value.trim();
+  });
+}
+function saveState(){localStorage.setItem('waterDropState',JSON.stringify(state));}
+function checkDayReset(){
+  const today=new Date().toDateString();
+  const last=localStorage.getItem('waterDropLastDate');
+  if(last!==today){
+    state.todayTotal=0;state.lastDrinkTime=null;state.logs={};
+    localStorage.setItem('waterDropLastDate',today);saveState();
+  }
+}
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='screen-main')updateMainScreen();
+  if(id==='screen-settings')loadSettings();
+}
+
+// 온보딩
+function goToGender(){state.name=document.getElementById('input-name').value.trim();saveState();showScreen('screen-gender');}
+function selectGender(g,el){state.gender=g;document.querySelectorAll('.gender-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');document.getElementById('btn-gender-next').disabled=false;}
+function goToWeight(){showScreen('screen-weight');updateWeightLabel();}
+function updateWeightLabel(){const v=document.getElementById('input-weight').value;state.weight=parseInt(v);document.getElementById('weight-val').textContent=v+' kg';}
+function goToActivity(){showScreen('screen-activity');}
+function selectActivity(a,el){state.activity=a;document.querySelectorAll('.activity-btn').forEach(b=>b.classList.remove('selected'));el.classList.add('selected');document.getElementById('btn-activity-next').disabled=false;}
+function goToGoal(){calculateGoal();document.getElementById('goal-display').textContent=state.dailyGoal;showScreen('screen-goal');}
+function calculateGoal(){
+  const mult={low:0.9,normal:1.0,high:1.2};
+  const adj=Math.round(state.weight*33*mult[state.activity]*0.6/100)*100;
+  state.dailyGoal=Math.max(800,Math.min(adj,3500));
+}
+function adjustGoal(v){state.dailyGoal=Math.max(400,Math.min(5000,state.dailyGoal+v));document.getElementById('goal-display').textContent=state.dailyGoal;}
+function goToCouple(){saveState();showScreen('screen-couple');}
+
+// 커플
+function createCouple(){
+  if(isOnCooldown('btn-create'))return;
+  const code=Math.random().toString(36).slice(2,8).toUpperCase();
+  state.coupleCode=code;
+  db.ref('couples/'+code+'/users/'+state.userId).set({
+    name:state.name,gender:state.gender,dailyGoal:state.dailyGoal,
+    drinkAmount:state.drinkAmount,drainMinutes:state.drainMinutes,
+    todayTotal:0,lastDrinkTime:null,logs:{}
+  }).then(()=>{
+    document.getElementById('my-couple-code').textContent=code;
+    document.getElementById('created-code-area').style.display='block';
+    saveState();listenToFirebase();startCooldown('btn-create',3);
+  }).catch(e=>showToast('오류: '+e.message));
+}
+function joinCouple(){
+  if(isOnCooldown('btn-join'))return;
+  const code=document.getElementById('input-couple-code').value.trim().toUpperCase();
+  if(code.length<4){showToast('코드를 입력하세요.');return;}
+  db.ref('couples/'+code).once('value').then(snap=>{
+    if(!snap.exists()){showToast('존재하지 않는 코드예요.');return;}
+    state.coupleCode=code;
+    db.ref('couples/'+code+'/users/'+state.userId).set({
+      name:state.name,gender:state.gender,dailyGoal:state.dailyGoal,
+      drinkAmount:state.drinkAmount,drainMinutes:state.drainMinutes,
+      todayTotal:0,lastDrinkTime:null,logs:{}
+    }).then(()=>{saveState();listenToFirebase();goToMain();});
+  });
+  startCooldown('btn-join',3);
+}
+function skipCouple(){saveState();goToMain();}
+function goToMain(){showScreen('screen-main');startDrainTimer();}
+
+// Firebase
+function listenToFirebase(){
+  if(!state.coupleCode)return;
+  db.ref('couples/'+state.coupleCode+'/users').on('value',snap=>{
+    const data=snap.val();if(!data)return;
+    for(const key in data){
+      if(key!==state.userId){
+        state.partnerKey=key;
+        partnerData=data[key];
+        if(partnerData.nudge&&partnerData.nudge.to===state.userId){
+          showNudgeBanner(data[key].name||'상대방');
+          db.ref('couples/'+state.coupleCode+'/users/'+key+'/nudge').remove();
+        }
+        break;
+      }
+    }
+    updateMainScreen();
+  });
+}
+
+// 물 마시기
+function drinkWater(){
+  if(isOnCooldown('btn-drink'))return;
+  state.todayTotal+=state.drinkAmount;
+  state.lastDrinkTime=new Date().toISOString();
+  if(!state.logs)state.logs={};
+  state.logs[new Date().toISOString()]=state.drinkAmount;
+  saveState();updateMainScreen();
+  if(state.coupleCode){
+    db.ref('couples/'+state.coupleCode+'/users/'+state.userId).update({
+      todayTotal:state.todayTotal,lastDrinkTime:state.lastDrinkTime,logs:state.logs
+    });
+  }
+  if(state.todayTotal>=state.dailyGoal)showToast('🎉 목표 달성! 대단해요!');
+  startCooldown('btn-drink',60);
+}
+function undoDrink(){
+  if(isOnCooldown('btn-undo'))return;
+  if(state.todayTotal<=0){showToast('취소할 기록이 없어요.');return;}
+  state.todayTotal=Math.max(0,state.todayTotal-state.drinkAmount);
+  if(state.logs){
+    const keys=Object.keys(state.logs).sort();
+    if(keys.length>0){const lk=keys[keys.length-1];state.logs[lk]-=state.drinkAmount;if(state.logs[lk]<=0)delete state.logs[lk];}
+  }
+  if(state.todayTotal<=0)state.lastDrinkTime=null;
+  saveState();updateMainScreen();
+  if(state.coupleCode){
+    db.ref('couples/'+state.coupleCode+'/users/'+state.userId).update({
+      todayTotal:state.todayTotal,lastDrinkTime:state.lastDrinkTime,logs:state.logs||{}
+    });
+  }
+  showToast('마지막 기록을 취소했어요.');
+  startCooldown('btn-undo',3);
+}
+
+// 드레인
+function calcDrainPercent(lastDrinkTime,drainMin){
+  if(!lastDrinkTime)return 0;
+  const elapsed=(Date.now()-new Date(lastDrinkTime).getTime())/60000;
+  return Math.round(Math.max(0,1-elapsed/drainMin)*100);
+}
+
+// ===== UI 업데이트 (좌우 분리) =====
+function updateMainScreen(){
+  const now=new Date();
+  document.getElementById('main-date').textContent=`${now.getMonth()+1}월 ${now.getDate()}일`;
+  document.getElementById('main-code').textContent=state.coupleCode?'코드: '+state.coupleCode:'';
+
+  // 내 수분 (왼쪽)
+  const myPct=calcDrainPercent(state.lastDrinkTime,state.drainMinutes);
+  document.getElementById('my-pct').textContent=myPct+'%';
+  document.getElementById('my-ml').textContent=state.todayTotal+' / '+state.dailyGoal+' ml';
+  document.getElementById('my-name-display').textContent=state.name||'나';
+
+  // 왼쪽 채우기
+  const fillLeft=document.getElementById('fill-left');
+  fillLeft.style.clipPath=`inset(${100-myPct}% 0 0 0)`;
+
+  // 상대방 (오른쪽)
+  let partnerPct=0;
+  if(partnerData){
+    partnerPct=calcDrainPercent(partnerData.lastDrinkTime,partnerData.drainMinutes||state.drainMinutes);
+    document.getElementById('partner-pct').textContent=partnerPct+'%';
+    document.getElementById('partner-ml').textContent=(partnerData.todayTotal||0)+' / '+(partnerData.dailyGoal||'?')+' ml';
+    document.getElementById('partner-name-display').textContent=partnerData.name||'상대방';
+  } else {
+    document.getElementById('partner-pct').textContent='—';
+    document.getElementById('partner-ml').textContent='연결 대기중';
+    document.getElementById('partner-name-display').textContent='상대방';
+  }
+
+  // 오른쪽 채우기
+  const fillRight=document.getElementById('fill-right');
+  fillRight.style.clipPath=`inset(${100-partnerPct}% 0 0 0)`;
+
+  // 하트
+  const hm=document.getElementById('heart-msg');
+  if(myPct>=60&&partnerPct>=60){hm.textContent='💕 둘 다 열심히 마시고 있어요!';hm.classList.add('show');}
+  else if(myPct>=60||partnerPct>=60){hm.textContent='💧 한 명은 열심히 마시고 있어요!';hm.classList.add('show');}
+  else hm.classList.remove('show');
+}
+
+// 타이머
+let drainInterval;
+function startDrainTimer(){
+  if(drainInterval)clearInterval(drainInterval);
+  drainInterval=setInterval(()=>{checkDayReset();updateMainScreen();},10000);
+}
+
+// 찔러보기
+function openNudgeModal(){if(!partnerData){showToast('아직 상대방이 연결되지 않았어요.');return;}document.getElementById('nudge-modal').classList.add('show');}
+function closeNudgeModal(){document.getElementById('nudge-modal').classList.remove('show');}
+function sendNudge(){
+  if(Date.now()-state.lastNudgeSent<300000){showToast('5분에 한 번만 보낼 수 있어요.');closeNudgeModal();return;}
+  if(!state.coupleCode||!state.partnerKey)return;
+  db.ref('couples/'+state.coupleCode+'/users/'+state.userId+'/nudge').set({
+    to:state.partnerKey,from:state.name,time:Date.now()
+  });
+  state.lastNudgeSent=Date.now();saveState();closeNudgeModal();showToast('💧 찔러보기를 보냈어요!');
+}
+function showNudgeBanner(name){
+  const b=document.getElementById('nudge-banner');
+  b.textContent=`💧 ${name}님이 물 마시라고 찔렀어요!`;
+  b.classList.add('show');
+  setTimeout(()=>b.classList.remove('show'),5000);
+}
+
+// 타임라인
+function openTimeline(){
+  const list=document.getElementById('timeline-list');
+  const items=[];
+  if(state.logs)for(const t in state.logs)items.push({time:new Date(t),text:`${state.name}: ${state.logs[t]}ml`,type:'blue'});
+  if(partnerData&&partnerData.logs)for(const t in partnerData.logs)items.push({time:new Date(t),text:`${partnerData.name||'상대방'}: ${partnerData.logs[t]}ml`,type:'pink'});
+  items.sort((a,b)=>b.time-a.time);
+  if(!items.length)list.innerHTML='<div class="timeline-empty">아직 기록이 없어요.<br>물 마시러 가볼까요? 💧</div>';
+  else list.innerHTML=items.map(i=>{
+    const h=i.time.getHours().toString().padStart(2,'0'),m=i.time.getMinutes().toString().padStart(2,'0');
+    return `<div class="timeline-item"><div class="timeline-dot ${i.type}"></div><div class="timeline-time">${h}:${m}</div><div class="timeline-text">${i.text}</div></div>`;
+  }).join('');
+  showScreen('screen-timeline');
+}
+
+// 설정
+function loadSettings(){
+  document.getElementById('set-name').value=state.name;
+  document.getElementById('set-goal').value=state.dailyGoal;
+  document.getElementById('set-amount').value=state.drinkAmount;
+  document.getElementById('set-drain').value=state.drainMinutes;
+  document.getElementById('set-code').textContent=state.coupleCode||'------';
+}
+function saveSettings(){
+  state.name=document.getElementById('set-name').value.trim()||state.name;
+  state.dailyGoal=parseInt(document.getElementById('set-goal').value)||state.dailyGoal;
+  state.drinkAmount=parseInt(document.getElementById('set-amount').value)||state.drinkAmount;
+  state.drainMinutes=parseInt(document.getElementById('set-drain').value)||state.drainMinutes;
+  saveState();
+  if(state.coupleCode)db.ref('couples/'+state.coupleCode+'/users/'+state.userId).update({
+    name:state.name,dailyGoal:state.dailyGoal,drinkAmount:state.drinkAmount,drainMinutes:state.drainMinutes
+  });
+  showToast('저장되었습니다!');showScreen('screen-main');
+}
+function resetAll(){
+  if(!confirm('모든 데이터를 삭제할까요?'))return;
+  if(state.coupleCode)db.ref('couples/'+state.coupleCode+'/users/'+state.userId).remove();
+  localStorage.removeItem('waterDropState');localStorage.removeItem('waterDropLastDate');
+  location.reload();
+}
+
+// 쿨타임
+const cooldowns={};
+function startCooldown(id,secs){
+  const btn=document.getElementById(id);if(!btn)return;
+  btn.disabled=true;cooldowns[id]=secs;
+  const orig=btn.innerHTML;
+  const timer=setInterval(()=>{
+    cooldowns[id]--;
+    if(cooldowns[id]<=0){clearInterval(timer);btn.disabled=false;btn.innerHTML=orig;delete cooldowns[id];}
+    else if(id==='btn-drink')btn.innerHTML=`⏳ ${cooldowns[id]}초`;
+  },1000);
+}
+function isOnCooldown(id){return cooldowns[id]&&cooldowns[id]>0;}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+init();
+</script>
+</body>
+</html>

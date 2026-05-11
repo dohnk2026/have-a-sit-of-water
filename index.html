@@ -280,14 +280,17 @@ function fixLogs(){
 function saveState(){localStorage.setItem('waterDropState',JSON.stringify(state));}
 
 function checkDayReset(){
-  const today=new Date().toDateString();
-  const last=localStorage.getItem('waterDropLastDate');
+  var today=new Date().toDateString();
+  var last=localStorage.getItem('waterDropLastDate');
   if(last!==today){
-    state.todayTotal=0;state.lastDrinkTime=null;state.logs={};
-    localStorage.setItem('waterDropLastDate',today);saveState();
+    state.todayTotal=0;
+    state.lastDrinkTime=null;
+    // logs는 지우지 않음 (날짜별 기록 보관)
+    localStorage.setItem('waterDropLastDate',today);
+    saveState();
     if(state.coupleCode){
       db.ref('couples/'+state.coupleCode+'/users/'+state.userId).update({
-        todayTotal:0,lastDrinkTime:null,logs:{}
+        todayTotal:0,lastDrinkTime:null
       });
     }
   }
@@ -508,15 +511,85 @@ function openTimeline(){
   var list=document.getElementById('timeline-list');
   var items=[];
   function parseLogKey(k){return new Date(k.replace(/_/g,'.'));}
-  if(state.logs)for(var t in state.logs)items.push({time:parseLogKey(t),text:(state.name||'나')+': '+state.logs[t]+'ml',type:'blue'});
-  if(partnerData&&partnerData.logs)for(var t in partnerData.logs)items.push({time:parseLogKey(t),text:(partnerData.name||'상대방')+': '+partnerData.logs[t]+'ml',type:'pink'});
-  items.sort(function(a,b){return b.time-a.time;});
-  if(!items.length)list.innerHTML='<div class="timeline-empty">아직 기록이 없어요.<br>물 마시러 가볼까요? 💧</div>';
-  else list.innerHTML=items.map(function(i){
-    var h=i.time.getHours().toString().padStart(2,'0'),m=i.time.getMinutes().toString().padStart(2,'0');
-    return '<div class="timeline-item"><div class="timeline-dot '+i.type+'"></div><div class="timeline-time">'+h+':'+m+'</div><div class="timeline-text">'+i.text+'</div></div>';
-  }).join('');
+
+  // 내 기록 (전체 날짜)
+  if(state.coupleCode){
+    // Firebase에서 전체 로그 가져오기
+    db.ref('couples/'+state.coupleCode+'/users').once('value',function(snap){
+      var data=snap.val();if(!data)return;
+      
+      // 내 로그
+      var myData=data[state.userId];
+      if(myData&&myData.logs){
+        for(var t in myData.logs){
+          items.push({time:parseLogKey(t),text:(state.name||'나')+': '+myData.logs[t]+'ml',type:'blue'});
+        }
+      }
+      
+      // 상대 로그
+      for(var key in data){
+        if(key!==state.userId&&data[key].logs){
+          var pName=data[key].name||'상대방';
+          for(var t in data[key].logs){
+            items.push({time:parseLogKey(t),text:pName+': '+data[key].logs[t]+'ml',type:'pink'});
+          }
+        }
+      }
+      
+      renderTimeline(items);
+    });
+  } else {
+    // 커플 미연결 시 로컬 데이터만
+    if(state.logs)for(var t in state.logs)items.push({time:parseLogKey(t),text:(state.name||'나')+': '+state.logs[t]+'ml',type:'blue'});
+    renderTimeline(items);
+  }
   showScreen('screen-timeline');
+}
+
+function renderTimeline(items){
+  var list=document.getElementById('timeline-list');
+  
+  if(!items.length){
+    list.innerHTML='<div class="timeline-empty">아직 기록이 없어요.<br>물 마시러 가볼까요? 💧</div>';
+    return;
+  }
+  
+  // 시간순 정렬 (최신이 위)
+  items.sort(function(a,b){return b.time-a.time;});
+  
+  // 날짜별 그룹화
+  var grouped={};
+  items.forEach(function(item){
+    var dateStr=item.time.getFullYear()+'년 '+(item.time.getMonth()+1)+'월 '+item.time.getDate()+'일';
+    if(!grouped[dateStr])grouped[dateStr]=[];
+    grouped[dateStr].push(item);
+  });
+  
+  // HTML 생성
+  var html='';
+  var today=new Date();
+  var todayStr=today.getFullYear()+'년 '+(today.getMonth()+1)+'월 '+today.getDate()+'일';
+  var yesterday=new Date(today);
+  yesterday.setDate(yesterday.getDate()-1);
+  var yesterdayStr=yesterday.getFullYear()+'년 '+(yesterday.getMonth()+1)+'월 '+yesterday.getDate()+'일';
+  
+  for(var date in grouped){
+    // 날짜 헤더
+    var label=date;
+    if(date===todayStr)label='오늘 ('+date+')';
+    else if(date===yesterdayStr)label='어제 ('+date+')';
+    
+    html+='<div style="font-size:13px;font-weight:700;color:#555;margin:18px 0 8px;padding-bottom:6px;border-bottom:2px solid #e0e0e0;">📅 '+label+'</div>';
+    
+    // 해당 날짜의 기록들
+    grouped[date].forEach(function(i){
+      var h=i.time.getHours().toString().padStart(2,'0');
+      var m=i.time.getMinutes().toString().padStart(2,'0');
+      html+='<div class="timeline-item"><div class="timeline-dot '+i.type+'"></div><div class="timeline-time">'+h+':'+m+'</div><div class="timeline-text">'+i.text+'</div></div>';
+    });
+  }
+  
+  list.innerHTML=html;
 }
 
 // ===== 설정 =====
